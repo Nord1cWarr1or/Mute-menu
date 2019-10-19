@@ -4,7 +4,7 @@
 #include <amxmisc>
 #include <reapi>
 
-new const PLUGIN_VERSION[]	= "1.1.1";
+new const PLUGIN_VERSION[]	= "1.1.2";
 
 #pragma semicolon 1
 
@@ -139,7 +139,7 @@ public func_MuteMenu(id, iPage)
 
 	if(iEnd != iPlayerCount)
 	{
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r9. \w%s^n\y0. \w%s", fmt("%l", "MUTEMENU_MENU_MORE"), iPage ? fmt("%l", "MUTEMENU_MENU_BACK") : fmt("%l", "MUTEMENU_MENU_EXIT"));
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r9. \w%s^n\r0. \w%s", fmt("%l", "MUTEMENU_MENU_MORE"), iPage ? fmt("%l", "MUTEMENU_MENU_BACK") : fmt("%l", "MUTEMENU_MENU_EXIT"));
 		iKeys |= MENU_KEY_9;
 	}
 	else formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r0. \w%s", iPage ? fmt("%l", "MUTEMENU_MENU_BACK") : fmt("%l", "MUTEMENU_MENU_EXIT"));
@@ -179,7 +179,7 @@ public func_MuteMenu_Handler(id, iKey)
 			if(!is_user_connected(iTarget) || iTarget == id)
 				return func_MuteMenu(id, g_iMenuPosition[id]);
 
-			ClientPrintToAllExcludeTwo(id, iTarget, print_team_default, "^3[^4%l^3] %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_ALL_MUTED" : "MUTEMENU_CHAT_ALL_UNMUTED", id, iTarget);
+			ClientPrintToAllExcludeTwo(id, iTarget, print_team_default, "%l %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_ALL_MUTED" : "MUTEMENU_CHAT_ALL_UNMUTED", id, iTarget);
 			
 			client_print_color(id, iTarget, "%l %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_ID_MUTED" : "MUTEMENU_CHAT_ID_UNMUTED", iTarget);
 			client_print_color(iTarget, id, "%l %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_TARGET_MUTED" : "MUTEMENU_CHAT_TARGET_UNMUTED", id);
