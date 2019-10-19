@@ -41,14 +41,14 @@ public plugin_init()
 	register_menu("func_MuteMenu", iKeys, "func_MuteMenu_Handler");
 
 	bind_pcvar_num(create_cvar("mutemenu_pause", "3",
-        .description = GetCvarDesc("MUTEMENU_CVAR_PAUSE")),
-        g_iCvarPause);
+		.description = GetCvarDesc("MUTEMENU_CVAR_PAUSE")),
+		g_iCvarPause);
 
 	bind_pcvar_num(create_cvar("mutemenu_onpage", "7",
-        .description = GetCvarDesc("MUTEMENU_CVAR_ONPAGE"),
-        .has_min = true, .min_val = 1.0,
-        .has_max = true, .max_val = 7.0), 
-        g_iCvarOnPage);
+		.description = GetCvarDesc("MUTEMENU_CVAR_ONPAGE"),
+		.has_min = true, .min_val = 1.0,
+		.has_max = true, .max_val = 7.0), 
+		g_iCvarOnPage);
 
 	#if defined AUTO_CFG
 	AutoExecConfig(true);
