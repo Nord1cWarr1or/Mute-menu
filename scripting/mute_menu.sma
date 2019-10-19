@@ -1,4 +1,4 @@
-/* Thx to w0w (Telegram: @twisterniq) for base of this plugin*/
+/* Thanks to w0w (Telegram: @twisterniq) for base of this plugin */
 
 #include <amxmodx>
 #include <amxmisc>
