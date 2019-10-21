@@ -4,26 +4,36 @@
 #include <amxmisc>
 #include <reapi>
 
-new const PLUGIN_VERSION[]	= "1.1.2";
+new const PLUGIN_VERSION[]	= "1.2.0";
 
 #pragma semicolon 1
+
+#define GetCvarDesc(%0) fmt("%L", LANG_SERVER, %0)
+
+#define GetBit(%1,%2)		(%1 & (1 << %2))
+#define SetBit(%1,%2)		%1 |= (1 << (%2 & 31))
+#define ClrBit(%1,%2)		%1 &= ~(1 << %2)
+#define ToggleBit(%1,%2)	%1 ^= (1 << %2)
+
+#define CheckFlag(%1,%2)	(g_iMutedPlayer[%1] & (1 << %2))	// Thanks to BlackSignature
+#define SetFlag(%1,%2)		(g_iMutedPlayer[%1] |= (1 << %2))
+#define ClearFlag(%1,%2)	(g_iMutedPlayer[%1] &= ~(1 << %2))
+#define ToggleFlag(%1,%2)	(g_iMutedPlayer[%1] ^= (1 << %2))
 
 new g_iCvarPause;
 new g_iCvarOnPage;
 
-new g_iMenuPlayers[MAX_PLAYERS + 1][MAX_PLAYERS], g_iMenuPosition[MAX_PLAYERS + 1];
-new bool:g_bMute[MAX_PLAYERS + 1][MAX_PLAYERS + 1];
+new g_iMuteMenuId;
+
+new g_iMenuPlayers[MAX_PLAYERS + 1][MAX_PLAYERS];
+new g_iMenuPosition[MAX_PLAYERS + 1];
+new g_iMutedPlayer[MAX_PLAYERS + 1];
 new g_iLastUsed[MAX_PLAYERS + 1];
 
 new g_bitMutedAll;
+new g_bitIsUserConnected;
 
 #define AUTO_CFG	// Comment out if you don't want the plugin config to be created automatically in "configs/plugins"
-
-#define GetCvarDesc(%0) fmt("%L", LANG_SERVER, %0)
-
-#define get_bit(%1,%2) (%1 & (1 << %2))
-#define clr_bit(%1,%2) %1 &= ~(1 << %2)
-#define toggle_bit(%1,%2) %1 ^= (1 << %2)
 
 public plugin_init()
 {
@@ -36,9 +46,10 @@ public plugin_init()
 	register_clcmd("say .ьгеу", "func_MuteMenu");
 	register_clcmd("say_team .ьгеу", "func_MuteMenu");
 
-	new iKeys = MENU_KEY_0|MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4|MENU_KEY_5|MENU_KEY_6|MENU_KEY_7|MENU_KEY_8|MENU_KEY_9;
-
-	register_menu("func_MuteMenu", iKeys, "func_MuteMenu_Handler");
+	register_menucmd(
+		.menuid = g_iMuteMenuId = register_menuid("func_MuteMenu"),
+		.keys = MENU_KEY_0|MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4|MENU_KEY_5|MENU_KEY_6|MENU_KEY_7|MENU_KEY_8|MENU_KEY_9,
+		.function = "func_MuteMenu_Handler");
 
 	bind_pcvar_num(create_cvar("mutemenu_pause", "3",
 		.description = GetCvarDesc("MUTEMENU_CVAR_PAUSE")),
@@ -64,17 +75,36 @@ public OnConfigsExecuted()
 
 public client_putinserver(id)
 {
+	SetBit(g_bitIsUserConnected, id);
+
 	for(new i = 1; i <= MaxClients; i++)
 	{
-		g_bMute[id][i] = false;
-		g_bMute[i][id] = get_bit(g_bitMutedAll, i) ? true : false;
+		ClearFlag(id, i);
+		
+		if(GetBit(g_bitMutedAll, i))
+		{
+			SetFlag(i, id);	
+		}
+		else ClearFlag(i, id);
 	}
-	clr_bit(g_bitMutedAll, id);
+
+	ClrBit(g_bitMutedAll, id);
+	RefreshMenu();
+}
+
+public client_disconnected(id)
+{
+	if(!GetBit(g_bitIsUserConnected, id))
+		return;
+
+	RequestFrame("RefreshMenu");
+
+	ClrBit(g_bitIsUserConnected, id);
 }
 
 public refwd_CanPlayerHearPlayer_Pre(iReceiver, iSender)
 {
-	if(g_bMute[iReceiver][iSender])
+	if(CheckFlag(iReceiver, iSender))
 	{
 		SetHookChainReturn(ATYPE_BOOL, false);
 		return HC_SUPERCEDE;
@@ -91,7 +121,7 @@ public func_MuteMenu(id, iPage)
 
 	for(new i = 1; i <= MaxClients; i++)
 	{
-		if(!is_user_connected(i) || is_user_bot(i) || is_user_hltv(i))
+		if(!GetBit(g_bitIsUserConnected, i) || is_user_bot(i) || is_user_hltv(i))
 			continue;
 
 		g_iMenuPlayers[id][iPlayerCount++] = i;
@@ -108,9 +138,9 @@ public func_MuteMenu(id, iPage)
 
 	SetGlobalTransTarget(id);
 
-	new iLen = formatex(szMenu, charsmax(szMenu), "%l \R%d/%d^n^n", "MUTEMENU_MENU_HEAD", iPage + 1, iPagesNum);
+	new iLen = formatex(szMenu, charsmax(szMenu), "%l%s^n^n", "MUTEMENU_MENU_HEAD", GetBit(g_bitMutedAll, id) ? "" : fmt(" \R%d/%d", iPage + 1, iPagesNum));
 
-	if(get_bit(g_bitMutedAll, id))
+	if(GetBit(g_bitMutedAll, id))
 	{
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%l^n", "MUTEMENU_MENU_MUTEDALL");
 	}
@@ -129,12 +159,12 @@ public func_MuteMenu(id, iPage)
 			{
 				iKeys |= (1 << iMenuItem);
 				iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r%d. \w%n%s%s^n", ++iMenuItem,
-					iPlayer, g_bMute[iPlayer][id] ? fmt(" %l", "MUTEMENU_MENU_MUTED_YOU") : "", g_bMute[id][iPlayer] ? fmt(" %l", "MUTEMENU_MENU_MUTED") : "");
+					iPlayer, CheckFlag(iPlayer, id) ? fmt(" %l", "MUTEMENU_MENU_MUTED_YOU") : "", CheckFlag(id, iPlayer) ? fmt(" %l", "MUTEMENU_MENU_MUTED") : "");
 			}
 		}
 	}
 
-	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r8. \w%l^n", get_bit(g_bitMutedAll, id) ? "MUTEMENU_MENU_UNMUTEALL" : "MUTEMENU_MENU_MUTEALL");
+	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r8. \w%l^n", GetBit(g_bitMutedAll, id) ? "MUTEMENU_MENU_UNMUTEALL" : "MUTEMENU_MENU_MUTEALL");
 	iKeys |= MENU_KEY_8;
 
 	if(iEnd != iPlayerCount)
@@ -160,15 +190,22 @@ public func_MuteMenu_Handler(id, iKey)
 	{
 		case 7:
 		{
-			toggle_bit(g_bitMutedAll, id);
+			ToggleBit(g_bitMutedAll, id);
 
 			for(new i = 1; i <= MaxClients; i++)
-				g_bMute[id][i] = get_bit(g_bitMutedAll, id) ? true : false;
+			{
+				if(GetBit(g_bitMutedAll, id))
+				{
+					SetFlag(id, i);
+				}
+				else ClearFlag(id, i);
+			}
 
-			ClientPrintToAllExcludeOne(id, print_team_red, "%l %l", "MUTEMENU_CHAT_TAG", get_bit(g_bitMutedAll, id) ? "MUTEMENU_CHAT_ALL_MUTEDALL" : "MUTEMENU_CHAT_ALL_UNMUTEDALL", id);
-			client_print_color(id, print_team_red, "%l %l", "MUTEMENU_CHAT_TAG", get_bit(g_bitMutedAll, id) ? "MUTEMENU_CHAT_ID_MUTEDALL" : "MUTEMENU_CHAT_ID_UNMUTEDALL");
+			ClientPrintToAllExcludeOne(id, print_team_red, "%l %l", "MUTEMENU_CHAT_TAG", GetBit(g_bitMutedAll, id) ? "MUTEMENU_CHAT_ALL_MUTEDALL" : "MUTEMENU_CHAT_ALL_UNMUTEDALL", id);
+			client_print_color(id, print_team_red, "%l %l", "MUTEMENU_CHAT_TAG", GetBit(g_bitMutedAll, id) ? "MUTEMENU_CHAT_ID_MUTEDALL" : "MUTEMENU_CHAT_ID_UNMUTEDALL");
 
-			g_iLastUsed[id] = get_systime();	
+			g_iLastUsed[id] = get_systime();
+			RefreshMenu();
 		}
 		case 8: func_MuteMenu(id, ++g_iMenuPosition[id]);
 		case 9: func_MuteMenu(id, --g_iMenuPosition[id]);
@@ -176,22 +213,39 @@ public func_MuteMenu_Handler(id, iKey)
 		{
 			new iTarget = g_iMenuPlayers[id][(g_iMenuPosition[id] * g_iCvarOnPage) + iKey];
 
-			if(!is_user_connected(iTarget) || iTarget == id)
+			if(!GetBit(g_bitIsUserConnected, iTarget) || iTarget == id)
 				return func_MuteMenu(id, g_iMenuPosition[id]);
 
-			ClientPrintToAllExcludeTwo(id, iTarget, print_team_default, "%l %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_ALL_MUTED" : "MUTEMENU_CHAT_ALL_UNMUTED", id, iTarget);
+			ClientPrintToAllExcludeTwo(id, iTarget, print_team_default, "%l %l", "MUTEMENU_CHAT_TAG", !CheckFlag(id, iTarget) ? "MUTEMENU_CHAT_ALL_MUTED" : "MUTEMENU_CHAT_ALL_UNMUTED", id, iTarget);
 			
-			client_print_color(id, iTarget, "%l %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_ID_MUTED" : "MUTEMENU_CHAT_ID_UNMUTED", iTarget);
-			client_print_color(iTarget, id, "%l %l", "MUTEMENU_CHAT_TAG", !g_bMute[id][iTarget] ? "MUTEMENU_CHAT_TARGET_MUTED" : "MUTEMENU_CHAT_TARGET_UNMUTED", id);
+			client_print_color(id, iTarget, "%l %l", "MUTEMENU_CHAT_TAG", !CheckFlag(id, iTarget) ? "MUTEMENU_CHAT_ID_MUTED" : "MUTEMENU_CHAT_ID_UNMUTED", iTarget);
+			client_print_color(iTarget, id, "%l %l", "MUTEMENU_CHAT_TAG", !CheckFlag(id, iTarget) ? "MUTEMENU_CHAT_TARGET_MUTED" : "MUTEMENU_CHAT_TARGET_UNMUTED", id);
 
-			g_bMute[id][iTarget] = !g_bMute[id][iTarget];
+			ToggleFlag(id, iTarget);
 			
 			g_iLastUsed[id] = get_systime();
 
 			func_MuteMenu(id, g_iMenuPosition[id]);
+			RefreshMenu();
 		}
 	}
 	return PLUGIN_HANDLED;
+}
+
+public RefreshMenu()	// Thanks to bionext for idea
+{
+	new iPlayers[MAX_PLAYERS], iPlayersNum;
+	get_players_ex(iPlayers, iPlayersNum, GetPlayers_ExcludeBots | GetPlayers_ExcludeHLTV);
+
+	for(new i, iPlayer; i < iPlayersNum; i++)
+	{
+		iPlayer = iPlayers[i];
+
+		if(check_menu_by_menuid(iPlayer, g_iMuteMenuId))
+		{
+			func_MuteMenu(iPlayer, g_iMenuPosition[iPlayer]);
+		}	
+	}
 }
 
 stock ClientPrintToAllExcludeOne(const iExcludePlayer, const iSender, const szMessage[], any:...)
@@ -230,4 +284,12 @@ stock ClientPrintToAllExcludeTwo(const iExcludePlayer1, const iExcludePlayer2, c
 			client_print_color(iPlayer, iSender, szText);
 		}
 	}
+}
+
+stock bool:check_menu_by_menuid(const pPlayer, iMenuIdToCheck)	// Thanks to BlackSignature
+{
+	new iMenuID, iKeys;
+	get_user_menu(pPlayer, iMenuID, iKeys);
+
+	return (iMenuID == iMenuIdToCheck);
 }
